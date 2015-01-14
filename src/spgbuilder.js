@@ -22,9 +22,9 @@ var _readDir = function(src, ext){
 };
 
 var _renderInfo = {};
-var _renderIndex = 0;
 
 var _renderPage = function(router, tpl, childRouter, cb){
+    var rootRouter = null;
     var parentRouter = {};
     if (childRouter){
         parentRouter = {
@@ -42,8 +42,8 @@ var _renderPage = function(router, tpl, childRouter, cb){
             };
         }
     }
+    
     if (_renderInfo[tpl]){
-        _renderIndex++;
         return;
     }
     _renderInfo[tpl] = parentRouter;
@@ -52,14 +52,15 @@ var _renderPage = function(router, tpl, childRouter, cb){
         parentRouter.title = pageConf.title;
         parentRouter.block = pageConf.block;
         pageConf.spgVar && (parentRouter.spgVar = pageConf.spgVar);
+
         if (router !== null){
             parentRouter.reg = router;
         }
+
         if (pageConf.layout && pageConf.layout !== 'outer'){
             parentRouter.layout = pageConf.layout;
-            _renderPage(null, pageConf.layout, parentRouter, cb);
+            rootRouter = _renderPage(null, pageConf.layout, parentRouter, cb);
         } else{
-            _renderIndex++;
             cb && cb(parentRouter);
         }
     });
@@ -86,27 +87,11 @@ var _render = function(cb){
                 reg: router,
                 router: tpl
             });
-            _renderIndex++;
-            if (_renderIndex >= rendercount){
-                flagRouterLoaded = true;
-                _renderIndex = 0;
-                if (flagRouterLoaded && flagBaseLoaded){
-                    cb && cb(layouts, baseLayoutConf);
-                }
-            }
-            continue;
+        } else {
+            _renderPage(router, tpl, null, function(layout){
+                layouts.push(layout);
+            });
         }
-
-        _renderPage(router, tpl, null, function(layout){
-            layouts.push(layout);
-            if (_renderIndex >= rendercount){
-                flagRouterLoaded = true;
-                _renderIndex = 0;
-                if (flagRouterLoaded && flagBaseLoaded){
-                    cb && cb(layouts, baseLayoutConf);
-                }
-            }
-        });
     }
     
     if (baseLayout){
@@ -119,14 +104,12 @@ var _render = function(cb){
             };
         } else{
             _renderPage(layoutReg, tpl, null, function(layout){
-                baseLayoutConf = layout;
-                flagBaseLoaded = true;
-                if (flagRouterLoaded && flagBaseLoaded){
-                    cb && cb(layouts, baseLayoutConf);
-                }
+                baseLayoutConf = layout
             });
         }
     }
+
+    cb && cb(layouts, baseLayoutConf);
 };
 
 var _mkdir = function(dirpath, mode){
@@ -171,52 +154,49 @@ var _renderEntrance = function(routerConf, layouts, cb){
         };
 
         _renderPage(reg, entrance.tpl, null, function(entranceInfo){
-            entranceRenderCount++;
-            if (entranceRenderCount >= entrances.length){
-                entranceInfo.block && (routerInline[reg].block = entranceInfo.block);
-                entranceInfo.title && (routerInline[reg].title = entranceInfo.title);
-                
-                var entranceTpl = fs.readFileSync(path.join(config.base, entrance.tpl), {
-                        encoding: 'utf8'
-                    });
-                entranceTpl = entranceTpl.replace(new RegExp([
-                    config.ld,
-                        'block(((?!' + config.rd + ')[\\s\\S])+[\\s\\S])',
-                    config.rd,
-                        '(((?!' + config.rd + ')[\\s\\S])*)',
-                    config.ld,
-                        '/block',
-                    config.rd
-                    ].join(''), 'g'), function(src, attr){
-
-                    var args = /name=['"]?([^'"]+)['"]?/.exec(attr);
-                    var blockName = args[1];
-                    if (blockName && entranceInfo.block[blockName]){
-                        var backTpl = entranceInfo.block[blockName].tpl;
-                        entranceInfo.block[blockName].tpl = '';
-                        return backTpl;
-                    }
-                }).replace(new RegExp([
-                    config.ld,
-                        'spgmain(((?!' + config.rd + ')[\\s\\S])+[\\s\\S])',
-                    config.rd].join('')), function(){
-                    return [
-                        '<script>',
-                            'window.' + entranceInfo.spgVar + '=',
-                            JSON.stringify(routerInline) + ';',
-                        '</script>'
-                    ].join('');
-                });
-
-                var distDir = path.dirname(entrance.dist);
-                _mkdir(distDir);
-
-                fs.writeFileSync(entrance.dist, entranceTpl, {
+            entranceInfo.block && (routerInline[reg].block = entranceInfo.block);
+            entranceInfo.title && (routerInline[reg].title = entranceInfo.title);
+            
+            var entranceTpl = fs.readFileSync(path.join(config.base, entrance.tpl), {
                     encoding: 'utf8'
                 });
+            entranceTpl = entranceTpl.replace(new RegExp([
+                config.ld,
+                    'block(((?!' + config.rd + ')[\\s\\S])+[\\s\\S])',
+                config.rd,
+                    '(((?!' + config.rd + ')[\\s\\S])*)',
+                config.ld,
+                    '/block',
+                config.rd
+                ].join(''), 'g'), function(src, attr){
 
-                cb && cb(entranceInfo);
-            }
+                var args = /name=['"]?([^'"]+)['"]?/.exec(attr);
+                var blockName = args[1];
+                if (blockName && entranceInfo.block[blockName]){
+                    var backTpl = entranceInfo.block[blockName].tpl;
+                    entranceInfo.block[blockName].tpl = '';
+                    return backTpl;
+                }
+            }).replace(new RegExp([
+                config.ld,
+                    'spgmain(((?!' + config.rd + ')[\\s\\S])+[\\s\\S])',
+                config.rd].join('')), function(){
+                return [
+                    '<script>',
+                        'window.' + entranceInfo.spgVar + '=',
+                        JSON.stringify(routerInline) + ';',
+                    '</script>'
+                ].join('');
+            });
+
+            var distDir = path.dirname(entrance.dist);
+            _mkdir(distDir);
+
+            fs.writeFileSync(entrance.dist, entranceTpl, {
+                encoding: 'utf8'
+            });
+
+            cb && cb(entranceInfo);
         });
     });
 };
@@ -273,10 +253,9 @@ var _compile = function(options, cb){
         }
 
         if (config.entrance && config.entrance.length){
-            _renderEntrance(routerConf, layouts, function(entranceInfo){
-                console.log('Wow Spg Compiled!');
-                cb && cb();
-            });
+            _renderEntrance(routerConf, layouts);
+            console.log('Wow Spg Compiled!');
+            cb && cb();
         } else{
             
             var routerDir = path.dirname(config.target);

@@ -1,6 +1,6 @@
 {
   "name": "wowspg-builder",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "wowbuilder to build a single page website by wowspg",
   "main": "./src/spgbuilder.js",
   "scripts": {

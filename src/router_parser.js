@@ -139,24 +139,22 @@ var _parse = function(src, config, cb){
         rd
         ].join(''));
 
-    fs.readFile(path.join(wowConfig.base, src), {
+    var fileContent = fs.readFileSync(path.join(wowConfig.base, src), {
         encoding: 'utf8'
-    },function(err, content){
-        if (err) throw err;
-        _renderBlock(content, pageConf, src);
-
-        var flagIsEntrance = false;
-        for (var entKey in wowConfig.entrance){
-            if (wowConfig.entrance[entKey].tpl === src){
-                flagIsEntrance = true;
-            }
-        }
-
-        if (wowConfig.isDeleteSource && !flagIsEntrance){
-            fs.unlinkSync(path.join(wowConfig.base, src));
-        }
-        cb && cb(pageConf);
     });
+    _renderBlock(fileContent, pageConf, src);
+
+    var flagIsEntrance = false;
+    for (var entKey in wowConfig.entrance){
+        if (wowConfig.entrance[entKey].tpl === src){
+            flagIsEntrance = true;
+        }
+    }
+
+    if (wowConfig.isDeleteSource && !flagIsEntrance){
+        fs.unlinkSync(path.join(wowConfig.base, src));
+    }
+    cb && cb(pageConf);
 };
 
 module.exports = {
